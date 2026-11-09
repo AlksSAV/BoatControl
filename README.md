@@ -32,5 +32,3 @@
 ```bash
 cd firmware && pio run && pio run -t upload
 ```
-
-Код прошивки не написан.
