@@ -39,8 +39,7 @@ SS=21 MOSI=18 MISO=20 SCK=19   WIFI_ENABLE=3 WIFI_ANT_CONFIG=14
 ## 4. Команды
 
 ```bash
-cd firmware
-pio run              # сборка
+pio run              # сборка (из корня проекта)
 pio run -t upload    # прошивка
 pio device monitor   # лог USB-CDC 115200
 ```
@@ -50,8 +49,8 @@ pio device monitor   # лог USB-CDC 115200
 ## 5. Структура
 
 ```
+platformio.ini, include/config.h, src/   прошивка (в корне — стандарт PIO)
 docs/       SPEC, HARDWARE, PLATFORM
-firmware/   platformio.ini, include/config.h, src/
 hardware/   монтаж
 tools/      разбор логов калибровки
 ```

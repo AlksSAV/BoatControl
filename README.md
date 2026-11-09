@@ -30,5 +30,5 @@
 ## Сборка
 
 ```bash
-cd firmware && pio run && pio run -t upload
+pio run && pio run -t upload
 ```
