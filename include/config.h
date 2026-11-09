@@ -66,7 +66,6 @@ constexpr uint16_t CAL_MAX_NOISE_ADC  = 25;  // разброс при покое
 // --- Индикация (SPEC п.4) ---
 constexpr uint16_t LED_BLINK_SLOW_MS = 600;  // CALIBRATE
 constexpr uint16_t LED_BLINK_FAST_MS = 120;  // FAULT
-constexpr uint16_t FAULT_CAL_BURST_MS = 2000; // период двойной вспышки
 
 // --- Отладка: 1 = периодический лог в USB-CDC ---
 #ifndef DEBUG_LOG
