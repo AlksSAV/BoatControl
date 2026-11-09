@@ -23,6 +23,10 @@
 - [docs/HARDWARE.md](docs/HARDWARE.md) — пины, схема входа, питание, BOM
 - [docs/PLATFORM.md](docs/PLATFORM.md) — PlatformIO + pioarduino 55.03.312, команды
 
+## Плата
+
+![XIAO ESP32-C6](docs/chip.jpeg)
+
 ## Сборка
 
 ```bash
