@@ -29,8 +29,34 @@
 
 ![XIAO ESP32-C6](docs/chip.jpeg)
 
-## Сборка
+## Прошивка
 
+### С платформы (PIO)
 ```bash
-pio run && pio run -t upload
+git checkout v1.0
+pio run -t upload
 ```
+
+### `esptool` v5.6.0 standalone (без Python)
+1. Скачать [`esptool-v5.6.0-windows-amd64.zip`](https://github.com/espressif/esptool/releases/download/v5.6.0/esptool-v5.6.0-windows-amd64.zip), распаковать.
+2. Скачать [`boatcontrol-v1.0-factory.bin`](https://github.com/AlksSAV/BoatControl/releases/download/v1.0/boatcontrol-v1.0-factory.bin) из релиза.
+3. Положить оба файла в одну папку, открыть `cmd`:
+```cmd
+esptool --chip esp32c6 -p COM7 -b 1500000 write_flash 0x0 boatcontrol-v1.0-factory.bin
+```
+`COM7` — порт платы (Диспетчер устройств). `factory.bin` = bootloader + partitions + app, флешится от `0x0`. Если на плате уже стоит прошивка — можно использовать `boatcontrol-v1.0-app.bin` (offset `0x10000`).
+
+### Espressif Web Flasher (без установки)
+Открыть в Chrome или Edge: https://espressif.github.io/esp-flasher-flash-app/
+1. **Connect** → выбрать порт (Web Serial, требует HTTPS и Chromium).
+2. **Manual Flash** → добавить файл `boatcontrol-v1.0-factory.bin` с адресом `0x0`.
+3. **Flash**.
+
+### Flash Download Tool (GUI)
+[Flash Download Tool v3.10.0](https://www.espressif.com/en/support/download/other-tools) — Windows, графический интерфейс.
+Адрес: `0x0`, файл `boatcontrol-v1.0-factory.bin`. ESP32-C6 официально не заявлен (версия 2023 г.).
+
+### Нюансы XIAO ESP32-C6
+- Прошивается через USB (GPIO12/13), внешний UART не нужен.
+- Если порт не появляется — удерживать **BOOT** при подключении кабеля.
+- Рубильник в силовой цепи обязателен (SPEC п.7).
