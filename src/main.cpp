@@ -10,13 +10,14 @@
 #include "throttle.h"
 #include "steering.h"
 #include "button.h"
+#include "calibration.h"
 
-enum class State : uint8_t { BOOT, CALIBRATE, READY, DRIVE, CRUISE, FAULT };
+enum class State : uint8_t { BOOT, CALIBRATE, CAL_MANUAL, READY, DRIVE, CRUISE, FAULT };
 
 static State g_state = State::BOOT;
 
-static Stick stick_x(PIN_STICK_X);
-static Stick stick_y(PIN_STICK_Y);
+static Stick stick_x(PIN_STICK_X, X_SPAN_ADC);
+static Stick stick_y(PIN_STICK_Y, THR_SPAN_ADC);
 static Throttle throttle;
 static Button button;
 
@@ -24,6 +25,13 @@ static uint32_t t_boot_ms = 0;        // момент включения
 static uint32_t t_last_ms = 0;        // прошлый такт
 static uint16_t esc_pulse = RC_PULSE_NEUTRAL;
 static uint16_t servo_pulse = RC_PULSE_NEUTRAL;
+
+// Ручная калибровка min/max: запрошена удержанием кнопки при подаче питания,
+// окно трекинга и момент последнего подтверждающего писка (SPEC п.5.5).
+static bool     manual_cal_request = false;
+static uint8_t  boot_btn_ticks = 0;   // тактов подряд с нажатой кнопкой в BOOT
+static uint32_t t_manual_ms = 0;
+static uint32_t t_manual_beep_ms = 0;
 
 // Круиз (SPEC п.6)
 static uint16_t cruise_pulse = RC_PULSE_NEUTRAL;  // уставка круиза
@@ -119,13 +127,19 @@ static void update_cruise_gesture(int32_t off) {
 static void enter(State s) {
     g_state = s;
     reset_gesture();
-    if (s == State::BOOT || s == State::CALIBRATE) {
+    if (s == State::BOOT || s == State::CALIBRATE || s == State::CAL_MANUAL) {
         throttle.force(RC_PULSE_NEUTRAL);
         cruise_exiting = false;
     }
     if (s == State::CALIBRATE) {
         stick_x.cal_reset();
         stick_y.cal_reset();
+    }
+    if (s == State::CAL_MANUAL) {
+        stick_x.man_reset();
+        stick_y.man_reset();
+        t_manual_ms = millis();
+        t_manual_beep_ms = millis();
     }
     if (s == State::FAULT) {
         throttle.force(RC_PULSE_NEUTRAL);
@@ -153,6 +167,11 @@ static void update_leds(uint32_t now) {
         case State::CALIBRATE:
             hal_led_ready(false);
             hal_led_built(blink_on);
+            break;
+        case State::CAL_MANUAL:
+            // Ручная калибровка: быстрое мигание обоих — «окно открыто» (SPEC п.5.5)
+            hal_led_ready(fast_on);
+            hal_led_built(fast_on);
             break;
         case State::READY:
         case State::DRIVE:
@@ -230,9 +249,60 @@ void loop() {
     button.update(hal_button_pressed(), now);
 
     switch (g_state) {
-        case State::BOOT:
-            if (now - t_boot_ms >= ARMING_DELAY_MS) enter(State::CALIBRATE);
+        case State::BOOT: {
+            // Кнопка, удерживаемая с подачи питания, запрашивает ручную
+            // калибровку min/max (SPEC п.5.5). Считаем такты подряд: кнопка
+            // уже дребезжит, Button в BOOT ещё не даёт событий.
+            if (hal_button_pressed()) {
+                if (boot_btn_ticks < UINT8_MAX) boot_btn_ticks++;
+            } else {
+                boot_btn_ticks = 0;
+            }
+            if (boot_btn_ticks >= CAL_MANUAL_HOLD_MS / LOOP_PERIOD_MS) {
+                manual_cal_request = true;
+            }
+
+            if (now - t_boot_ms >= ARMING_DELAY_MS) {
+                // Иначе — авто-тарировка нуля как всегда (SPEC п.5: ноль
+                // тарируется каждый старт, он дрейфует).
+                if (manual_cal_request) {
+                    trigger_buzzer(BUZZ_ON_MS);
+                    enter(State::CAL_MANUAL);
+                } else {
+                    enter(State::CALIBRATE);
+                }
+            }
             break;
+        }
+
+        case State::CAL_MANUAL: {
+            // Выходы держим в нейтрали (enter() уже force'нул), мотор не крутится.
+            stick_x.man_add();
+            stick_y.man_add();
+
+            // Подтверждающий писк раз в CAL_MANUAL_BEEP_MS: «окно открыто» (SPEC п.5.5).
+            if (now - t_manual_beep_ms >= CAL_MANUAL_BEEP_MS) {
+                t_manual_beep_ms = now;
+                trigger_buzzer(80);
+            }
+
+            if (now - t_manual_ms >= CAL_MANUAL_WINDOW_MS) {
+                bool ok = stick_x.man_finish() && stick_y.man_finish();
+                if (ok) {
+                    CalData cal = { stick_x.span(), stick_y.span() };
+                    ok = cal_store(cal);
+                }
+                if (ok) {
+                    trigger_buzzer(BUZZ_ON_MS);  // успех
+                    enter(State::READY);
+                } else {
+                    g_fault_cal = true;          // провал размаха/записи
+                    trigger_buzzer(BUZZ_OFF_MS);
+                    enter(State::FAULT);
+                }
+            }
+            break;
+        }
 
         case State::CALIBRATE: {
             stick_x.cal_add();
@@ -240,6 +310,14 @@ void loop() {
             if (stick_x.cal_n_done() >= CAL_SAMPLES &&
                 stick_y.cal_n_done() >= CAL_SAMPLES) {
                 if (stick_x.cal_finish() && stick_y.cal_finish()) {
+                    // Ноль тарируем каждый старт (дрейфует), а полный ход берём
+                    // из NVS, если он записан ручной калибровкой (SPEC п.5.5):
+                    // без него порог жеста «до упора» работает по константе.
+                    CalData cal;
+                    if (cal_load(&cal)) {
+                        stick_x.apply(stick_x.center(), cal.span_x);
+                        stick_y.apply(stick_y.center(), cal.span_y);
+                    }
                     enter(State::READY);
                 } else {
                     g_fault_cal = true;   // отличимая индикация (SPEC п.5)
@@ -306,9 +384,9 @@ void loop() {
 
     handle_button(now);
 
-    // Выходы руля: нейтраль в BOOT/CALIBRATE/FAULT, иначе по стике (SPEC п.4)
+    // Выходы руля: нейтраль в BOOT/CALIBRATE/CAL_MANUAL/FAULT, иначе по стике (SPEC п.4)
     if (g_state == State::BOOT || g_state == State::CALIBRATE ||
-        g_state == State::FAULT) {
+        g_state == State::CAL_MANUAL || g_state == State::FAULT) {
         servo_pulse = RC_PULSE_NEUTRAL;
     } else {
         servo_pulse = servo_target();

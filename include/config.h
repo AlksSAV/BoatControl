@@ -70,6 +70,15 @@ constexpr uint8_t  CAL_SAMPLES        = 50;  // средних за такты �
 constexpr uint16_t CAL_MAX_OFFSET_ADC = 120; // допуск смещения нуля
 constexpr uint16_t CAL_MAX_NOISE_ADC  = 25;  // разброс при покое
 
+// --- Ручная калибровка min/max и NVS (SPEC п.5.5) ---
+constexpr const char* CAL_NVS_NAMESPACE   = "boatctl";  // пространство имён NVS
+constexpr uint16_t CAL_MANUAL_HOLD_MS   = 1000;   // удержание кнопки при подаче питания
+constexpr uint16_t CAL_MANUAL_WINDOW_MS = 15000;  // окно перевода стика
+constexpr uint16_t CAL_MANUAL_BEEP_MS   = 1000;   // подтверждающий писк в окне
+constexpr uint16_t CAL_MIN_SPAN_ADC     = 1000;   // минимальный полуход оси
+constexpr uint16_t CAL_MAX_SPAN_ADC     = 2040;   // максимальный полуход (потолок АЦП)
+constexpr uint8_t  CAL_NVS_VERSION      = 1;      // версия формата в NVS
+
 // --- Индикация (SPEC п.4) ---
 constexpr uint16_t LED_BLINK_SLOW_MS = 600;  // CALIBRATE
 constexpr uint16_t LED_BLINK_FAST_MS = 120;  // FAULT

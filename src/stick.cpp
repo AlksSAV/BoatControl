@@ -1,6 +1,13 @@
 #include "stick.h"
 #include "hal.h"
 
+int32_t Stick::offset() const {
+    int32_t raw = (int32_t)_mean - (int32_t)_center;
+    if (_span == 0) return raw;  // хода нет (авто-тарировка нуля) — сырые АЦП-единицы
+    // Нормализация к эталонному ходу: полный реальный ход -> ±_ref_span.
+    return (int32_t)((int64_t)raw * _ref_span / _span);
+}
+
 uint16_t Stick::update() {
     uint32_t sum = 0;
     for (uint8_t i = 0; i < ADC_SAMPLES_PER_LOOP; i++) {
@@ -57,4 +64,43 @@ bool Stick::cal_finish() {
         _calibrated = true;
     }
     return ok;
+}
+
+// --- Ручная калибровка min/max (SPEC п.5.5) ---
+
+void Stick::man_reset() {
+    _man_min = ADC_MAX_RAW;
+    _man_max = 0;
+    _man_seen = false;
+}
+
+void Stick::man_add() {
+    update();
+    // Крайние положения хода дают ~0 и ~4095, то есть формально выходят за
+    // ADC_VALID_MIN/MAX. Здесь это НЕ считаем отказом: broken() ловит обрыв
+    // в рабочих состояниях, а в окне калибровки полный размах обязателен.
+    if (!_man_seen) {
+        _man_min = _mean;
+        _man_max = _mean;
+        _man_seen = true;
+        return;
+    }
+    if (_mean < _man_min) _man_min = _mean;
+    if (_mean > _man_max) _man_max = _mean;
+}
+
+bool Stick::man_finish() {
+    if (!_man_seen) return false;
+    uint32_t span2 = (uint32_t)_man_max - _man_min;
+    // Размах: не меньше минимального (иначе стик не двигали) и не больше
+    // физического предела АЦП (SPEC п.5.5).
+    if (span2 < 2UL * CAL_MIN_SPAN_ADC || span2 > 2UL * CAL_MAX_SPAN_ADC) return false;
+    // Центр обязан остаться в границах валидности.
+    uint16_t center = (uint16_t)((_man_min + _man_max) / 2);
+    if (center < ADC_VALID_MIN || center > ADC_VALID_MAX) return false;
+
+    _center = center;
+    _span = (uint16_t)(span2 / 2);
+    _calibrated = true;
+    return true;
 }
