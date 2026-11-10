@@ -47,10 +47,10 @@ esptool --chip esp32c6 -p COM7 -b 1500000 write_flash 0x0 boatcontrol-v1.0-facto
 `COM7` — порт платы (Диспетчер устройств). `factory.bin` = bootloader + partitions + app, флешится от `0x0`. Если на плате уже стоит прошивка — можно использовать `boatcontrol-v1.0-app.bin` (offset `0x10000`).
 
 ### Espressif Web Flasher (без установки)
-Открыть в Chrome или Edge: https://espressif.github.io/esp-flasher-flash-app/
-1. **Connect** → выбрать порт (Web Serial, требует HTTPS и Chromium).
-2. **Manual Flash** → добавить файл `boatcontrol-v1.0-factory.bin` с адресом `0x0`.
-3. **Flash**.
+Открыть в Chrome или Edge (Web Serial, не Safari): https://espressif.github.io/esptool-js/
+1. **Connect** → выбрать порт платы.
+2. В секции **Program**: **Flash Address** = `0x0`, **File** = `boatcontrol-v1.0-factory.bin`.
+3. **Program**.
 
 ### Flash Download Tool (GUI)
 [Flash Download Tool v3.10.0](https://www.espressif.com/en/support/download/other-tools) — Windows, графический интерфейс.
