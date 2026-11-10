@@ -50,7 +50,7 @@ void Throttle::slew_to(uint16_t target_us, uint16_t dt_ms, uint16_t cap_us) {
     uint16_t step = (diff > allowed) ? allowed : diff;
 
     uint16_t new_mag = (tgt_mag > cur_mag) ? (cur_mag + step) : (cur_mag - step);
-    int sign = (sign_tgt != 0) ? sign_tgt : 0;
+    int sign = sign_tgt;
 
     if (sign < 0) _out = (uint16_t)(RC_PULSE_NEUTRAL - new_mag);       // вперёд
     else if (sign > 0) _out = (uint16_t)(RC_PULSE_NEUTRAL + new_mag);  // назад

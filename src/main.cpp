@@ -29,6 +29,10 @@ static uint16_t servo_pulse = RC_PULSE_NEUTRAL;
 static uint16_t cruise_pulse = RC_PULSE_NEUTRAL;  // уставка круиза
 static bool cruise_exiting = false;               // плавный возврат к стике
 
+// FAULT по ошибке тарировки отличим индикацией (SPEC п.5): бортовой LED
+// мигает в противофазе LED готовности. FAULT терминален, флаг ставится один раз.
+static bool g_fault_cal = false;
+
 // Жест «до упора, затем в центр» меняет уставку круиза (SPEC п.6)
 static int8_t  edge_dir = 0;         // -1 = вперёд, +1 = назад, 0 = не в упоре
 static uint8_t edge_ticks = 0;       // тактов подряд в упоре
@@ -161,7 +165,8 @@ static void update_leds(uint32_t now) {
             break;
         case State::FAULT:
             hal_led_ready(fast_on);
-            hal_led_built(fast_on);
+            // Ошибка тарировки: бортовой LED в противофазе готовности (SPEC п.5)
+            hal_led_built(g_fault_cal ? !fast_on : fast_on);
             break;
     }
     hal_led_cruise(g_state == State::CRUISE);
@@ -200,8 +205,6 @@ static void handle_button(uint32_t now) {
     if (button.short_press()) {
         if (g_state == State::DRIVE) {
             uint16_t out = throttle.out();
-            int32_t off = stick_y.offset();
-            if (THR_INVERT) off = -off;
             // включение: только вперёд и выше порога (SPEC п.6)
             bool forward = (out < RC_PULSE_NEUTRAL);
             if (forward && Throttle::percent(out) >= CRUISE_MIN_PCT) {
@@ -239,6 +242,7 @@ void loop() {
                 if (stick_x.cal_finish() && stick_y.cal_finish()) {
                     enter(State::READY);
                 } else {
+                    g_fault_cal = true;   // отличимая индикация (SPEC п.5)
                     enter(State::FAULT);  // ошибка калибровки
                 }
             }
@@ -320,10 +324,12 @@ void loop() {
     static uint32_t t_log = 0;
     if (now - t_log >= DEBUG_LOG_PERIOD_MS) {
         t_log = now;
-        Serial.printf("st=%u esc=%u stb=%u x=%d y=%d cx=%u cy=%u\n",
+        // crs=уставка, gest=подтверждённый жест (0/±1), armed=готовность жеста
+        Serial.printf("st=%u esc=%u stb=%u x=%d y=%d cx=%u cy=%u crs=%u gest=%d arm=%u\n",
                       (unsigned)g_state, esc_pulse, servo_pulse,
                       (int)stick_x.offset(), (int)stick_y.offset(),
-                      stick_x.center(), stick_y.center());
+                      stick_x.center(), stick_y.center(),
+                      cruise_pulse, (int)gesture_pending, (unsigned)edge_armed);
     }
 #endif
 
