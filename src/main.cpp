@@ -26,11 +26,69 @@ static uint16_t esc_pulse = RC_PULSE_NEUTRAL;
 static uint16_t servo_pulse = RC_PULSE_NEUTRAL;
 
 // Круиз (SPEC п.6)
-static uint16_t cruise_pulse = RC_PULSE_NEUTRAL;  // зафиксированное значение
+static uint16_t cruise_pulse = RC_PULSE_NEUTRAL;  // уставка круиза
 static bool cruise_exiting = false;               // плавный возврат к стике
+
+// Жест «до упора, затем в центр» меняет уставку круиза (SPEC п.6)
+static int8_t  edge_dir = 0;         // -1 = вперёд, +1 = назад, 0 = не в упоре
+static uint8_t edge_ticks = 0;       // тактов подряд в упоре
+static int8_t  gesture_pending = 0;  // подтверждённый жест, ждёт возврата в центр
+static bool    edge_armed = false;   // жест считается только после центра
+
+static void reset_gesture() {
+    edge_dir = 0;
+    edge_ticks = 0;
+    gesture_pending = 0;
+    edge_armed = false;
+}
+
+// Положение стика для жеста: -1 вперёд (газ растёт), +1 назад, 0 вне упора.
+static int8_t edge_dir_of(int32_t off) {
+    int32_t mag = (off >= 0) ? off : -off;
+    if ((int32_t)mag * 100 < (int32_t)THR_SPAN_ADC * CRUISE_EDGE_PCT) return 0;
+    return (off > 0) ? -1 : 1;
+}
+
+// Жест «в упор, затем в центр»: шаг уставки на CRUISE_STEP_PCT (SPEC п.6).
+// Шаг применяется только после возврата в центр — защита от заклинивания стика.
+static void update_cruise_gesture(int32_t off) {
+    const uint16_t step_us = (uint16_t)(RC_PULSE_SPAN * CRUISE_STEP_PCT / 100);
+    const int32_t  center_zone = THR_DEADBAND_ADC;
+    int32_t mag = (off >= 0) ? off : -off;
+
+    if (mag <= center_zone) {
+        if (gesture_pending < 0) {          // вперёд: импульс меньше — газ больше
+            cruise_pulse = (cruise_pulse > RC_PULSE_NEUTRAL - RC_PULSE_SPAN)
+                         ? (uint16_t)(cruise_pulse - step_us)
+                         : (uint16_t)(RC_PULSE_NEUTRAL - RC_PULSE_SPAN);
+        } else if (gesture_pending > 0) {   // назад: до стопа 1500
+            cruise_pulse = (cruise_pulse + step_us < RC_PULSE_NEUTRAL)
+                         ? (uint16_t)(cruise_pulse + step_us)
+                         : RC_PULSE_NEUTRAL;
+        }
+        gesture_pending = 0;
+        edge_dir = 0;
+        edge_ticks = 0;
+        edge_armed = true;  // следующий жест — после этой точки в центре
+        return;
+    }
+
+    int8_t e = edge_dir_of(off);
+    if (e == 0) return;  // между центром и упором — жест не считаем
+    if (!edge_armed) return;  // после включения круиза сначала нужен центр
+
+    if (e != edge_dir) {
+        edge_dir = e;
+        edge_ticks = 1;
+    } else if (edge_ticks < CRUISE_EDGE_TICKS) {
+        edge_ticks++;
+    }
+    if (edge_ticks >= CRUISE_EDGE_TICKS) gesture_pending = e;
+}
 
 static void enter(State s) {
     g_state = s;
+    reset_gesture();
     if (s == State::BOOT || s == State::CALIBRATE) {
         throttle.force(RC_PULSE_NEUTRAL);
         cruise_exiting = false;
@@ -196,12 +254,14 @@ void loop() {
 
         case State::CRUISE: {
             stick_x.update();          // руль работает (SPEC п.6)
-            stick_y.update();          // читаем, но игнорируем
+            stick_y.update();          // ось Y — только жест уставки (SPEC п.6)
             if (stick_x.broken()) { enter(State::FAULT); break; }
-            // обрыв оси Y в круизе газ не роняет (SPEC п.6/7);
-            // недостоверность зафиксированного значения невозможна программно —
-            // значение валидно на момент фиксации
-            throttle.force(cruise_pulse);
+            // обрыв оси Y в круизе газ не роняет (SPEC п.6/7)
+            int32_t off = stick_y.offset();
+            if (THR_INVERT) off = -off;
+            if (!stick_y.broken()) update_cruise_gesture(off);
+            // уставка меняется плавно: шаг проходит за несколько тактов
+            throttle.slew_to(cruise_pulse, dt);
             break;
         }
 

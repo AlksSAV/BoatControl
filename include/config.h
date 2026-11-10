@@ -57,6 +57,9 @@ constexpr uint16_t BTN_LONG_MS      = 2000;  // длинное = принуди�
 constexpr uint32_t BTN_STUCK_MS     = 10000; // залипание -> FAULT
 constexpr uint8_t  CRUISE_MIN_PCT   = 12;    // минимум газа для включения
 constexpr uint16_t CRUISE_RAMP_MS   = 800;   // возврат из круиза к стике
+constexpr uint8_t  CRUISE_STEP_PCT  = 10;    // шаг уставки жестом, % хода вперёд
+constexpr uint8_t  CRUISE_EDGE_PCT  = 95;    // «до упора» — порог жеста
+constexpr uint8_t  CRUISE_EDGE_TICKS = 3;    // подтверждение упора, тактов
 
 // --- Тарировка (SPEC п.5) ---
 constexpr uint8_t  CAL_SAMPLES        = 50;  // средних за такты на ось
