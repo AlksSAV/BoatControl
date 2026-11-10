@@ -11,9 +11,11 @@ void hal_init() {
     pinMode(PIN_LED_READY, OUTPUT);
     pinMode(PIN_LED_CRUISE, OUTPUT);
     pinMode(PIN_LED_BUILT, OUTPUT);
+    pinMode(PIN_BUZZER, OUTPUT);
     digitalWrite(PIN_LED_READY, LOW);
     digitalWrite(PIN_LED_CRUISE, LOW);
     digitalWrite(PIN_LED_BUILT, HIGH);  // active-low: выкл
+    digitalWrite(PIN_BUZZER, LOW);
 
     // Обе RC-линии сразу в нейтраль: выход никогда не в Hi-Z (SPEC п.7).
     ledcAttach(PIN_ESC, RC_FREQ_HZ, LEDC_RESOLUTION);
@@ -50,6 +52,10 @@ void hal_led_cruise(bool on) {
 
 void hal_led_built(bool on) {
     digitalWrite(PIN_LED_BUILT, on ? LOW : HIGH);  // active-low
+}
+
+void hal_buzzer(bool on) {
+    digitalWrite(PIN_BUZZER, on ? HIGH : LOW);
 }
 
 void hal_wdt_start() {

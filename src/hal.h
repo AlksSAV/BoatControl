@@ -24,6 +24,9 @@ void hal_led_ready(bool on);
 void hal_led_cruise(bool on);
 void hal_led_built(bool on);
 
+// Активный зуммер: true = писк (HIGH на выводе).
+void hal_buzzer(bool on);
+
 // Сторожевой таймер. Кормить раз в такт, иначе сброс платы.
 void hal_wdt_start();
 void hal_wdt_feed();

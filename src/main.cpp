@@ -35,6 +35,26 @@ static uint8_t edge_ticks = 0;       // тактов подряд в упоре
 static int8_t  gesture_pending = 0;  // подтверждённый жест, ждёт возврата в центр
 static bool    edge_armed = false;   // жест считается только после центра
 
+// Зуммер: однократный писк при входе/выходе из круиза
+static bool     buzzer_on = false;
+static uint32_t buzzer_t0 = 0;
+static uint16_t buzzer_dur = 0;
+
+static void trigger_buzzer(uint16_t ms) {
+    buzzer_on = true;
+    buzzer_t0 = millis();
+    buzzer_dur = ms;
+    hal_buzzer(true);
+}
+
+// Устойчиво к переполнению millis().
+static void update_buzzer(uint32_t now) {
+    if (buzzer_on && (now - buzzer_t0) >= buzzer_dur) {
+        buzzer_on = false;
+        hal_buzzer(false);
+    }
+}
+
 static void reset_gesture() {
     edge_dir = 0;
     edge_ticks = 0;
@@ -166,6 +186,7 @@ static void handle_button(uint32_t now) {
         // принудительный сброс круиза
         if (g_state == State::CRUISE) {
             cruise_exiting = true;
+            trigger_buzzer(BUZZ_OFF_MS);  // деактивация — длинный писк
             enter(State::DRIVE);
         }
         return;
@@ -180,10 +201,12 @@ static void handle_button(uint32_t now) {
             if (forward && Throttle::percent(out) >= CRUISE_MIN_PCT) {
                 cruise_pulse = out;   // фиксируем ФАКТИЧЕСКИЙ выход
                 cruise_exiting = false;
+                trigger_buzzer(BUZZ_ON_MS);  // активация — короткий писк
                 enter(State::CRUISE);
             }
         } else if (g_state == State::CRUISE) {
             cruise_exiting = true;    // плавный возврат к стике
+            trigger_buzzer(BUZZ_OFF_MS);  // деактивация — длинный писк
             enter(State::DRIVE);
         }
     }
@@ -285,6 +308,7 @@ void loop() {
     hal_esc_pulse(esc_pulse);
     hal_servo_pulse(servo_pulse);
     update_leds(now);
+    update_buzzer(now);
 
 #if DEBUG_LOG
     static uint32_t t_log = 0;

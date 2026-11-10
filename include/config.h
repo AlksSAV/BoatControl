@@ -14,6 +14,7 @@ constexpr uint8_t PIN_ESC        = 22;   // D4 — сигнал ESC
 constexpr uint8_t PIN_SERVO      = 23;   // D5 — сигнал сервы
 constexpr uint8_t PIN_LED_READY  = 16;   // D6
 constexpr uint8_t PIN_LED_CRUISE = 17;   // D7
+constexpr uint8_t PIN_BUZZER     = 19;   // D8 — активный зуммер, HIGH = писк
 constexpr uint8_t PIN_LED_BUILT  = 15;   // бортовой LED, active-low
 
 // --- RC-сигнал: 50 Гц, импульс 1000-2000 мкс (SPEC п.3) ---
@@ -69,6 +70,8 @@ constexpr uint16_t CAL_MAX_NOISE_ADC  = 25;  // разброс при покое
 // --- Индикация (SPEC п.4) ---
 constexpr uint16_t LED_BLINK_SLOW_MS = 600;  // CALIBRATE
 constexpr uint16_t LED_BLINK_FAST_MS = 120;  // FAULT
+constexpr uint16_t BUZZ_ON_MS  = 120;  // короткий писк: круиз включён
+constexpr uint16_t BUZZ_OFF_MS = 500;  // длинный писк: круиз выключен
 
 // --- Отладка: 1 = периодический лог в USB-CDC ---
 #ifndef DEBUG_LOG
