@@ -382,7 +382,14 @@ void loop() {
             break;
     }
 
-    handle_button(now);
+    // В BOOT/CALIBRATE/CAL_MANUAL кнопка не обрабатывается: в этих состояниях
+    // она либо не готова (BOOT), либо удерживается оператором для входа в
+    // ручную калибровку — иначе залипание (10 с) ложно увело бы в FAULT
+    // внутри 15-секундного окна (SPEC п.5.5).
+    if (g_state != State::BOOT && g_state != State::CALIBRATE &&
+        g_state != State::CAL_MANUAL) {
+        handle_button(now);
+    }
 
     // Выходы руля: нейтраль в BOOT/CALIBRATE/CAL_MANUAL/FAULT, иначе по стике (SPEC п.4)
     if (g_state == State::BOOT || g_state == State::CALIBRATE ||
