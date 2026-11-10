@@ -72,6 +72,8 @@ constexpr uint16_t LED_BLINK_SLOW_MS = 600;  // CALIBRATE
 constexpr uint16_t LED_BLINK_FAST_MS = 120;  // FAULT
 constexpr uint16_t BUZZ_ON_MS  = 120;  // короткий писк: круиз включён
 constexpr uint16_t BUZZ_OFF_MS = 500;  // длинный писк: круиз выключен
+constexpr uint16_t BUZZ_UP_MS   = 100; // шаг уставки вверх (жест «от себя»)
+constexpr uint16_t BUZZ_DOWN_MS = 250; // шаг уставки вниз (жест «на себя»)
 
 // --- Отладка: 1 = периодический лог в USB-CDC ---
 #ifndef DEBUG_LOG

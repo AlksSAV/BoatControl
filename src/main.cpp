@@ -77,6 +77,7 @@ static void update_cruise_gesture(int32_t off) {
     int32_t mag = (off >= 0) ? off : -off;
 
     if (mag <= center_zone) {
+        uint16_t prev = cruise_pulse;
         if (gesture_pending < 0) {          // вперёд: импульс меньше — газ больше
             cruise_pulse = (cruise_pulse > RC_PULSE_NEUTRAL - RC_PULSE_SPAN)
                          ? (uint16_t)(cruise_pulse - step_us)
@@ -85,6 +86,11 @@ static void update_cruise_gesture(int32_t off) {
             cruise_pulse = (cruise_pulse + step_us < RC_PULSE_NEUTRAL)
                          ? (uint16_t)(cruise_pulse + step_us)
                          : RC_PULSE_NEUTRAL;
+        }
+        // Писк только если уставка реально изменилась: на границе он молчит,
+        // и оператор понимает, что дальше не куда.
+        if (cruise_pulse != prev) {
+            trigger_buzzer(gesture_pending < 0 ? BUZZ_UP_MS : BUZZ_DOWN_MS);
         }
         gesture_pending = 0;
         edge_dir = 0;
