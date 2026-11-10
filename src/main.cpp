@@ -333,6 +333,7 @@ void loop() {
 void setup() {
 #if DEBUG_LOG
     Serial.begin(115200);
+    Serial.printf("BoatControl %s\n", FIRMWARE_VERSION);
 #endif
     hal_init();
     hal_wdt_start();

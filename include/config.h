@@ -6,6 +6,9 @@
 
 #include <Arduino.h>
 
+// --- Прошивка ---
+#define FIRMWARE_VERSION "1.0"
+
 // --- Пины (docs/HARDWARE.md п.2, проверено: variants/XIAO_ESP32C6) ---
 constexpr uint8_t PIN_STICK_X    = 0;    // D0/A0, ADC1_CH0 — руль
 constexpr uint8_t PIN_STICK_Y    = 1;    // D1/A1, ADC1_CH1 — газ
