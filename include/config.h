@@ -54,6 +54,9 @@ constexpr uint8_t  STB_INVERT     = 0;
 constexpr float    X_EXPONENT     = 1.4f;
 constexpr uint16_t STB_PULSE_MIN  = 1000;    // программный упор (SPEC п.3)
 constexpr uint16_t STB_PULSE_MAX  = 2000;
+// Время хода сервы от упора до упора (1000 -> 2000), мс. Скорость =
+// 2*RC_PULSE_SPAN / STB_SLEW_FULL_MS мкс/мс, т.е. при 2000 = 0,5 мкс/мс.
+constexpr uint16_t STB_SLEW_FULL_MS = 2000;
 
 // --- Кнопка и круиз (SPEC п.6) ---
 constexpr uint16_t BTN_DEBOUNCE_MS  = 25;

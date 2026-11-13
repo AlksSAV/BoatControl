@@ -5,6 +5,7 @@
 #include <unity.h>
 #include "config.h"
 #include "throttle.h"
+#include "steering.h"
 #include "button.h"
 
 void setUp(void) {}
@@ -134,6 +135,79 @@ static void test_force_breaks_hold(void) {
     TEST_ASSERT_TRUE(t.out() < before);  // газ пошёл сразу, без новой паузы
 }
 
+// ---------- Steering::map_pulse: карта без сглаживания ----------
+
+static void test_stb_map_neutral_and_deadband(void) {
+    TEST_ASSERT_EQUAL_UINT16(RC_PULSE_NEUTRAL, Steering::map_pulse(0));
+    TEST_ASSERT_EQUAL_UINT16(RC_PULSE_NEUTRAL, Steering::map_pulse(X_DEADBAND_ADC));
+    TEST_ASSERT_EQUAL_UINT16(RC_PULSE_NEUTRAL, Steering::map_pulse(-X_DEADBAND_ADC));
+}
+
+static void test_stb_map_full_ends(void) {
+    // полный ход вправо = упор 2000, влево = 1000; за пределами хода — не больше
+    TEST_ASSERT_EQUAL_UINT16(STB_PULSE_MAX, Steering::map_pulse(X_SPAN_ADC));
+    TEST_ASSERT_EQUAL_UINT16(STB_PULSE_MAX, Steering::map_pulse(X_SPAN_ADC + 500));
+    TEST_ASSERT_EQUAL_UINT16(STB_PULSE_MIN, Steering::map_pulse(-X_SPAN_ADC));
+    TEST_ASSERT_EQUAL_UINT16(STB_PULSE_MIN, Steering::map_pulse(-X_SPAN_ADC - 500));
+}
+
+// ---------- Steering::slew_to: ограничение скорости хода сервы ----------
+
+static void test_stb_slew_step_limited(void) {
+    Steering s;
+    // цель — полный вправо (2000). За такт 20 мс проходимо не более
+    // (STB_PULSE_MAX-STB_PULSE_MIN)*20/STB_SLEW_FULL_MS мкс.
+    const uint16_t max_step =
+        (uint16_t)((uint32_t)(STB_PULSE_MAX - STB_PULSE_MIN) * 20UL / STB_SLEW_FULL_MS);
+    s.slew_to(STB_PULSE_MAX, 20);
+    uint16_t moved = (uint16_t)(s.out() - RC_PULSE_NEUTRAL);
+    TEST_ASSERT_TRUE(moved > 0);
+    TEST_ASSERT_TRUE(moved <= max_step);
+}
+
+static void test_stb_slew_full_span_takes_two_seconds(void) {
+    Steering s;
+    // от упора до упора: 1000 -> 2000 за STB_SLEW_FULL_MS (ровно 100 тактов по 20 мс)
+    s.force(STB_PULSE_MIN);
+    for (int i = 0; i < 100; i++) s.slew_to(STB_PULSE_MAX, 20);
+    TEST_ASSERT_EQUAL_UINT16(STB_PULSE_MAX, s.out());
+
+    // и в обратную сторону (возврат через нейтраль) — тот же темп
+    s.force(STB_PULSE_MAX);
+    for (int i = 0; i < 100; i++) s.slew_to(STB_PULSE_MIN, 20);
+    TEST_ASSERT_EQUAL_UINT16(STB_PULSE_MIN, s.out());
+}
+
+static void test_stb_slew_not_early(void) {
+    Steering s;
+    // раньше времени цель достигнута быть не может: 50 тактов = половина хода
+    s.force(RC_PULSE_NEUTRAL);
+    for (int i = 0; i < 50; i++) s.slew_to(STB_PULSE_MAX, 20);
+    TEST_ASSERT_TRUE(s.out() < STB_PULSE_MAX);
+    uint16_t halfway = (uint16_t)(RC_PULSE_NEUTRAL + (STB_PULSE_MAX - RC_PULSE_NEUTRAL) / 2);
+    TEST_ASSERT_INT_WITHIN(2, halfway, s.out());
+}
+
+static void test_stb_slew_small_dt_still_moves(void) {
+    Steering s;
+    // dt меньше одного шага по формуле: минимум 1 мкс за такт, иначе серва встанет
+    s.force(RC_PULSE_NEUTRAL);
+    uint16_t prev = s.out();
+    for (int i = 0; i < 5; i++) {
+        s.slew_to(STB_PULSE_MAX, 1);
+        TEST_ASSERT_TRUE(s.out() > prev);
+        prev = s.out();
+    }
+}
+
+static void test_stb_slew_deadband_target_held(void) {
+    Steering s;
+    // цель = текущее значение: шаг нулевой, выход не дрожит
+    s.force(RC_PULSE_NEUTRAL);
+    s.slew_to(RC_PULSE_NEUTRAL, 20);
+    TEST_ASSERT_EQUAL_UINT16(RC_PULSE_NEUTRAL, s.out());
+}
+
 // ---------- Button ----------
 // Время во всех тестах монотонно: один временной отсчёт на всю сцену.
 
@@ -217,6 +291,14 @@ int main(void) {
     RUN_TEST(test_slew_cap_limits_step);
     RUN_TEST(test_slew_to_neutral_is_immediate_cut);
     RUN_TEST(test_force_breaks_hold);
+    // steering: карта + ограничение скорости хода сервы
+    RUN_TEST(test_stb_map_neutral_and_deadband);
+    RUN_TEST(test_stb_map_full_ends);
+    RUN_TEST(test_stb_slew_step_limited);
+    RUN_TEST(test_stb_slew_full_span_takes_two_seconds);
+    RUN_TEST(test_stb_slew_not_early);
+    RUN_TEST(test_stb_slew_small_dt_still_moves);
+    RUN_TEST(test_stb_slew_deadband_target_held);
     // button
     RUN_TEST(test_button_short_press);
     RUN_TEST(test_button_debounce_filters_bounce);

@@ -24,3 +24,21 @@ uint16_t Steering::map_pulse(int32_t offset_adc) {
     if (pulse > STB_PULSE_MAX) pulse = STB_PULSE_MAX;
     return (uint16_t)pulse;
 }
+
+// Ход сервы ограничиваем скоростью, а не формой кривой: полный ход упор-в-упор
+// (STB_PULSE_MIN..STB_PULSE_MAX) занимает STB_SLEW_FULL_MS, поэтому за dt_ms
+// проходим (STB_PULSE_MAX-STB_PULSE_MIN)*dt/STB_SLEW_FULL_MS мкс. Дробный шаг
+// округляем вверх (минимум 1 мкс), иначе на малом dt серва встаёт и цели не
+// достигает.
+void Steering::slew_to(uint16_t target_us, uint16_t dt_ms) {
+    uint16_t diff = (target_us > _out) ? (uint16_t)(target_us - _out)
+                                       : (uint16_t)(_out - target_us);
+    if (diff == 0) return;
+
+    uint32_t step = (uint32_t)(STB_PULSE_MAX - STB_PULSE_MIN) * dt_ms / STB_SLEW_FULL_MS;
+    if (step == 0) step = 1;
+    if (step > diff) step = diff;
+
+    _out = (target_us > _out) ? (uint16_t)(_out + step)
+                              : (uint16_t)(_out - step);
+}

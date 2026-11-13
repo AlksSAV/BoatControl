@@ -19,6 +19,7 @@ static State g_state = State::BOOT;
 static Stick stick_x(PIN_STICK_X, X_SPAN_ADC);
 static Stick stick_y(PIN_STICK_Y, THR_SPAN_ADC);
 static Throttle throttle;
+static Steering steering;
 static Button button;
 
 static uint32_t t_boot_ms = 0;        // момент включения
@@ -391,13 +392,16 @@ void loop() {
         handle_button(now);
     }
 
-    // Выходы руля: нейтраль в BOOT/CALIBRATE/CAL_MANUAL/FAULT, иначе по стике (SPEC п.4)
+    // Выходы руля: нейтраль в BOOT/CALIBRATE/CAL_MANUAL/FAULT, иначе по стике (SPEC п.4).
+    // Цель всегда протягивается с ограничением скорости хода (STB_SLEW_FULL_MS),
+    // без отдельных исключений: в том же темпе серва возвращается и в нейтраль.
     if (g_state == State::BOOT || g_state == State::CALIBRATE ||
         g_state == State::CAL_MANUAL || g_state == State::FAULT) {
-        servo_pulse = RC_PULSE_NEUTRAL;
+        steering.slew_to(RC_PULSE_NEUTRAL, dt);
     } else {
-        servo_pulse = servo_target();
+        steering.slew_to(servo_target(), dt);
     }
+    servo_pulse = steering.out();
     esc_pulse = throttle.out();
 
     hal_esc_pulse(esc_pulse);
