@@ -90,6 +90,52 @@ constexpr uint16_t BUZZ_OFF_MS = 500;  // длинный писк: круиз в
 constexpr uint16_t BUZZ_UP_MS   = 100; // шаг уставки вверх (жест «от себя»)
 constexpr uint16_t BUZZ_DOWN_MS = 250; // шаг уставки вниз (жест «на себя»)
 
+// --- Сервисный веб-режим (SPEC п.11) ---
+// SoftAP поднимается в setup() и живёт только в сервисном окне: если за
+// WEB_AP_TIMEOUT_MS к точке ни одна станция не ассоциировалась, радио гаснет
+// до следующей перезапитки. Переход в DRIVE/CRUISE/FAULT закрывает окно
+// немедленно — веб не переживает начало движения.
+constexpr uint8_t  WEB_ENABLE          = 1;        // 0 = радио не поднимается вовсе
+constexpr uint16_t WEB_AP_TIMEOUT_MS   = 60000;    // окно ожидания подключения на старте
+constexpr uint32_t WEB_AP_IDLE_CLOSE_MS = 300000;  // закрытие, если клиент отвалился (5 мин)
+constexpr uint16_t WEB_POLL_MS         = 500;      // период телеметрии в браузере
+constexpr uint8_t  WEB_CMD_QUEUE_LEN   = 4;        // глубина очереди команд из loop-потока
+// Имя точки и пароль — сервисные, не пользовательские. Пароль сменить перед
+// выходом на воду (WPA2 требует >= 8 символов).
+constexpr const char* WEB_AP_SSID      = "BoatControl-Service";
+constexpr const char* WEB_AP_PASS      = "boatcal1";
+
+// --- Диапазоны runtime-параметров (SPEC п.11) ---
+// Всё, что правится из веба и хранится в NVS. Дефолты — константы выше;
+// границы заведомо шире рабочих значений, но физически безопасны: веб не может
+// выставить ход 0 или rate limit, ломающий логику.
+constexpr uint16_t THR_SPAN_ADC_MIN  = 400;
+constexpr uint16_t THR_SPAN_ADC_MAX  = 2047;
+constexpr uint16_t THR_DB_ADC_MIN    = 5;
+constexpr uint16_t THR_DB_ADC_MAX    = 300;   // меньше THR_SPAN_ADC_MIN
+constexpr uint8_t  THR_RATE_PCT_MIN  = 1;
+constexpr uint8_t  THR_RATE_PCT_MAX  = 100;
+constexpr uint16_t THR_ZERO_MS_MIN   = 0;
+constexpr uint16_t THR_ZERO_MS_MAX   = 2000;
+constexpr uint16_t X_SPAN_ADC_MIN    = 400;
+constexpr uint16_t X_SPAN_ADC_MAX    = 2047;
+constexpr uint16_t X_DB_ADC_MIN      = 5;
+constexpr uint16_t X_DB_ADC_MAX      = 300;
+constexpr float    X_EXPONENT_MIN    = 1.0f;  // < 1 был бы обратный руль у центра
+constexpr float    X_EXPONENT_MAX    = 3.0f;
+constexpr uint16_t STB_SLEW_MS_MIN   = 500;   // быстрее 0,5 с упор-в-упор — рывок
+constexpr uint16_t STB_SLEW_MS_MAX   = 10000;
+constexpr uint16_t STB_PULSE_MIN_MIN = 1000;  // не выходим за RC-диапазон
+constexpr uint16_t STB_PULSE_MAX_MAX = 2000;
+constexpr uint8_t  CRUISE_MIN_PCT_MIN = 1;
+constexpr uint8_t  CRUISE_MIN_PCT_MAX = 100;
+constexpr uint8_t  CRUISE_STEP_PCT_MIN = 1;
+constexpr uint8_t  CRUISE_STEP_PCT_MAX = 50;
+constexpr uint8_t  CRUISE_EDGE_PCT_MIN = 50;
+constexpr uint8_t  CRUISE_EDGE_PCT_MAX = 100;
+constexpr uint16_t CRUISE_RAMP_MS_MIN = 100;
+constexpr uint16_t CRUISE_RAMP_MS_MAX = 5000;
+
 // --- Отладка: 1 = периодический лог в USB-CDC ---
 #ifndef DEBUG_LOG
 #define DEBUG_LOG 0

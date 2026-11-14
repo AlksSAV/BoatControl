@@ -11,8 +11,9 @@
 
 class Stick {
   public:
-    // ref_span — эталонный ход оси из config.h (к нему нормализуем).
-    Stick(uint8_t pin, uint16_t ref_span) : _pin(pin), _ref_span(ref_span) {}
+    // ref_span — эталонный ход оси (к нему нормализуем). Указатель на
+    // runtime-параметр g_params, чтобы правка из веба действовала сразу.
+    Stick(uint8_t pin, const uint16_t* ref_span) : _pin(pin), _ref_span(ref_span) {}
 
     // Один такт: ADC_SAMPLES_PER_LOOP отсчётов -> среднее. Возвращает среднее.
     uint16_t update();
@@ -52,7 +53,7 @@ class Stick {
     static constexpr uint8_t WINDOW = 1000 / LOOP_PERIOD_MS;  // ~1 с средних
 
     uint8_t _pin;
-    uint16_t _ref_span;
+    const uint16_t* _ref_span;
     uint16_t _mean = ADC_MID_RAW;
     uint16_t _center = ADC_MID_RAW;
     uint16_t _span = 0;              // 0 = калибровки хода нет

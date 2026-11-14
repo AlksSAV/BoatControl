@@ -11,13 +11,18 @@
 #include "steering.h"
 #include "button.h"
 #include "calibration.h"
+#include "params.h"
+
+#if WEB_ENABLE
+#include "web.h"
+#endif
 
 enum class State : uint8_t { BOOT, CALIBRATE, CAL_MANUAL, READY, DRIVE, CRUISE, FAULT };
 
 static State g_state = State::BOOT;
 
-static Stick stick_x(PIN_STICK_X, X_SPAN_ADC);
-static Stick stick_y(PIN_STICK_Y, THR_SPAN_ADC);
+static Stick stick_x(PIN_STICK_X, &g_params.x_span_adc);
+static Stick stick_y(PIN_STICK_Y, &g_params.thr_span_adc);
 static Throttle throttle;
 static Steering steering;
 static Button button;
@@ -53,6 +58,26 @@ static bool     buzzer_on = false;
 static uint32_t buzzer_t0 = 0;
 static uint16_t buzzer_dur = 0;
 
+// Имя состояния для телеметрии веба (SPEC п.11).
+static const char* state_name(State s) {
+    switch (s) {
+        case State::BOOT:       return "BOOT";
+        case State::CALIBRATE:  return "CALIBRATE";
+        case State::CAL_MANUAL: return "CAL_MANUAL";
+        case State::READY:      return "READY";
+        case State::DRIVE:      return "DRIVE";
+        case State::CRUISE:     return "CRUISE";
+        case State::FAULT:      return "FAULT";
+    }
+    return "?";
+}
+
+#if WEB_ENABLE
+// Снимок телеметрии: заполняется в конце такта, читается обработчиком
+// /api/status внутри web_update().
+static WebStatus g_web_snapshot = {};
+#endif
+
 static void trigger_buzzer(uint16_t ms) {
     buzzer_on = true;
     buzzer_t0 = millis();
@@ -78,15 +103,15 @@ static void reset_gesture() {
 // Положение стика для жеста: -1 вперёд (газ растёт), +1 назад, 0 вне упора.
 static int8_t edge_dir_of(int32_t off) {
     int32_t mag = (off >= 0) ? off : -off;
-    if ((int32_t)mag * 100 < (int32_t)THR_SPAN_ADC * CRUISE_EDGE_PCT) return 0;
+    if ((int32_t)mag * 100 < (int32_t)g_params.thr_span_adc * g_params.cruise_edge_pct) return 0;
     return (off > 0) ? -1 : 1;
 }
 
-// Жест «в упор, затем в центр»: шаг уставки на CRUISE_STEP_PCT (SPEC п.6).
+// Жест «в упор, затем в центр»: шаг уставки на cruise_step_pct (SPEC п.6).
 // Шаг применяется только после возврата в центр — защита от заклинивания стика.
 static void update_cruise_gesture(int32_t off) {
-    const uint16_t step_us = (uint16_t)(RC_PULSE_SPAN * CRUISE_STEP_PCT / 100);
-    const int32_t  center_zone = THR_DEADBAND_ADC;
+    const uint16_t step_us = (uint16_t)(RC_PULSE_SPAN * g_params.cruise_step_pct / 100);
+    const int32_t  center_zone = g_params.thr_deadband_adc;
     int32_t mag = (off >= 0) ? off : -off;
 
     if (mag <= center_zone) {
@@ -147,6 +172,11 @@ static void enter(State s) {
         cruise_exiting = false;
         cruise_pulse = RC_PULSE_NEUTRAL;
     }
+    // Веб: начало движения или отказ закрывают сервисное окно (SPEC п.11).
+    // В BOOT/CALIBRATE/CAL_MANUAL/READY окно ещё открыто — в них веб нужен.
+#if WEB_ENABLE
+    if (s == State::DRIVE || s == State::CRUISE || s == State::FAULT) web_close();
+#endif
 }
 
 // Индикация (SPEC п.4, п.5)
@@ -227,7 +257,7 @@ static void handle_button(uint32_t now) {
             uint16_t out = throttle.out();
             // включение: только вперёд и выше порога (SPEC п.6)
             bool forward = (out < RC_PULSE_NEUTRAL);
-            if (forward && Throttle::percent(out) >= CRUISE_MIN_PCT) {
+            if (forward && Throttle::percent(out) >= g_params.cruise_min_pct) {
                 cruise_pulse = out;   // фиксируем ФАКТИЧЕСКИЙ выход
                 cruise_exiting = false;
                 trigger_buzzer(BUZZ_ON_MS);  // активация — короткий писк
@@ -246,6 +276,25 @@ void loop() {
     if (now - t_last_ms < LOOP_PERIOD_MS) return;
     uint16_t dt = (uint16_t)(now - t_last_ms);
     t_last_ms = now;
+
+    // --- Сервисный веб: очередь команд (SPEC п.11) ---
+#if WEB_ENABLE
+    {
+        WebCmd cmd;
+        while (web_take_cmd(&cmd)) {
+            if (cmd == WebCmd::CALIBRATE) {
+                // Запуск ручной калибровки из веба: если в READY — переходим в CAL_MANUAL.
+                if (g_state == State::READY) {
+                    manual_cal_request = true;
+                    trigger_buzzer(BUZZ_ON_MS);
+                    enter(State::CAL_MANUAL);
+                }
+            } else if (cmd == WebCmd::CLOSE) {
+                web_close();  // явное закрытие сервиса кнопкой в браузере
+            }
+        }
+    }
+#endif
 
     button.update(hal_button_pressed(), now);
 
@@ -350,8 +399,8 @@ void loop() {
             uint16_t tgt = throttle_target();
             uint16_t cap = 0;
             if (cruise_exiting && tgt != throttle.out()) {
-                // плавный возврат из круиза за CRUISE_RAMP_MS (SPEC п.6)
-                cap = RC_PULSE_SPAN * dt / CRUISE_RAMP_MS;
+                // плавный возврат из круиза за cruise_ramp_ms (SPEC п.6)
+                cap = RC_PULSE_SPAN * dt / g_params.cruise_ramp_ms;
                 if (cap == 0) cap = 1;
             } else {
                 cruise_exiting = false;
@@ -409,6 +458,21 @@ void loop() {
     update_leds(now);
     update_buzzer(now);
 
+    // Снимок телеметрии для веб-интерфейса (SPEC п.11).
+#if WEB_ENABLE
+    g_web_snapshot = {
+        state_name(g_state), (uint8_t)g_state,
+        esc_pulse, servo_pulse,
+        stick_x.last(), stick_y.last(),
+        (int32_t)stick_x.offset(), (int32_t)stick_y.offset(),
+        stick_x.center(), stick_y.center(),
+        stick_x.span(), stick_y.span(),
+        cruise_pulse,
+        manual_cal_request
+    };
+    web_update(g_web_snapshot, now);
+#endif
+
 #if DEBUG_LOG
     static uint32_t t_log = 0;
     if (now - t_log >= DEBUG_LOG_PERIOD_MS) {
@@ -432,7 +496,16 @@ void setup() {
 #endif
     hal_init();
     hal_wdt_start();
+
+    // Runtime-параметры: дефолт из config.h, затем NVS (если есть и валидна).
+    params_default(&g_params);
+    params_load(&g_params);
+
     t_boot_ms = millis();
     t_last_ms = millis();
     enter(State::BOOT);
+
+#if WEB_ENABLE
+    web_init();
+#endif
 }

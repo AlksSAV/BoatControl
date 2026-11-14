@@ -4,8 +4,8 @@
 int32_t Stick::offset() const {
     int32_t raw = (int32_t)_mean - (int32_t)_center;
     if (_span == 0) return raw;  // хода нет (авто-тарировка нуля) — сырые АЦП-единицы
-    // Нормализация к эталонному ходу: полный реальный ход -> ±_ref_span.
-    return (int32_t)((int64_t)raw * _ref_span / _span);
+    // Нормализация к эталонному ходу: полный реальный ход -> ±ref_span.
+    return (int32_t)((int64_t)raw * (int32_t)*_ref_span / _span);
 }
 
 uint16_t Stick::update() {
